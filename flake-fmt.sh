@@ -4,20 +4,20 @@
 set -euo pipefail
 
 needsUpdate=0
-currentSystem=$(nix eval --raw --impure --expr builtins.currentSystem)
+currentSystem=$(nix --extra-experimental-features 'nix-command flakes' eval --raw --impure --expr builtins.currentSystem )
 toplevel=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 buildArgs=()
-fmt="$toplevel/.git/flake-fmt"
+# Escape the directory name for safe use in cache path
+escaped_toplevel=$(printf '%s' "$toplevel" | sha256sum | cut -d' ' -f1)
+cache_dir="$toplevel/.cache/flake-fmt"
+fmt="$cache_dir/$escaped_toplevel"
 
-if command -v treefmt &>/dev/null; then
-    exec treefmt "$@"
-fi
-
-if [[ ! -d "$toplevel/.git/flake-fmt" ]]; then
+if [[ ! -d "$fmt" ]]; then
     needsUpdate=1
+    mkdir -p "$cache_dir"
 elif [[ -n "$toplevel" ]]; then
-    buildArgs+=("-o" "$toplevel"/.git/flake-fmt)
-    referenceTime=$(stat -c %Y "$toplevel"/.git/flake-fmt)
+    buildArgs+=("-o" "$fmt")
+    referenceTime=$(stat -c %Y "$fmt")
     for file in flake.nix flake.lock; do
         if [[ -f "$file" ]] && [[ "$(stat -c %Y "$file")" -gt "$referenceTime" ]]; then
             needsUpdate=1
@@ -27,7 +27,7 @@ elif [[ -n "$toplevel" ]]; then
 fi
 
 if [[ "$needsUpdate" == 1 ]]; then
-    fmt=$(nix build --out-link "$toplevel/.git/flake-fmt" --builders '' "${buildArgs[@]}" ".#formatter.${currentSystem}" --print-out-paths)
+    fmt=$(nix --extra-experimental-features 'nix-command flakes' build --print-out-paths --out-link "$fmt" --builders '' "${buildArgs[@]}" ".#formatter.${currentSystem}" )
 fi
 
 # treefmt has multiple outputs

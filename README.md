@@ -49,7 +49,7 @@ flake-fmt path/to/file.nix
 
 1. First checks if `treefmt` is available globally and uses it directly if found
 2. Otherwise, evaluates your flake to get the formatter for your current system
-3. Builds the formatter using Nix and caches it in `.git/flake-fmt`
+3. Builds the formatter using Nix and caches it in `.cache/flake-fmt/` with a hashed directory name
 4. Executes the formatter with any arguments you passed
 
 The formatter is only rebuilt when your `flake.nix` or `flake.lock` changes, making subsequent runs fast.
