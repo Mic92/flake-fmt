@@ -8,8 +8,23 @@ runNix() {
 	nix --extra-experimental-features 'nix-command flakes' "$@"
 }
 
+# Parse arguments - everything before -- goes to nix, everything after goes to formatter
+nixArgs=()
+formatterArgs=()
+sawDashDash=0
+
+for arg in "$@"; do
+	if [[ "$arg" == "--" ]]; then
+		sawDashDash=1
+	elif [[ $sawDashDash -eq 0 ]]; then
+		nixArgs+=("$arg")
+	else
+		formatterArgs+=("$arg")
+	fi
+done
+
 needsUpdate=0
-currentSystem=$(runNix eval --raw --impure --expr builtins.currentSystem)
+currentSystem=$(runNix eval --raw --impure --expr builtins.currentSystem "${nixArgs[@]}")
 
 # Function to find the closest flake.nix
 find_flake_root() {
@@ -57,23 +72,23 @@ if [[ "$needsUpdate" == 1 ]]; then
 	# Check if formatter exists for current system
 	has_formatter_check="(val: val ? ${currentSystem})"
 
-	if [[ $(runNix eval ".#formatter" --apply "$has_formatter_check") != "true" ]]; then
+	if [[ $(runNix eval ".#formatter" --apply "$has_formatter_check" "${nixArgs[@]}") != "true" ]]; then
 		echo "Warning: No formatter defined for system ${currentSystem} in flake.nix" >&2
 		exit 0
 	fi
 
 	# Formatter exists, build it
-	fmt=$(runNix build --print-out-paths --out-link "$fmt" --builders '' --keep-failed "${buildArgs[@]}" ".#formatter.${currentSystem}")
+	fmt=$(runNix build --print-out-paths --out-link "$fmt" --builders '' --keep-failed "${buildArgs[@]}" "${nixArgs[@]}" ".#formatter.${currentSystem}")
 fi
 
 # treefmt has multiple outputs
 if [[ -x "$fmt/bin/treefmt" ]]; then
-	exec "$fmt/bin/treefmt" "$@"
+	exec "$fmt/bin/treefmt" "${formatterArgs[@]}"
 fi
 
 for file in "$fmt/bin/"*; do
 	# shellcheck disable=SC2068
-	exec "$file" "$@"
+	exec "$file" "${formatterArgs[@]}"
 done
 echo "No formatter found in $fmt/bin"
 exit 1

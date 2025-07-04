@@ -1,10 +1,9 @@
 # flake-fmt
 
-A smart formatter wrapper for Nix flakes that automatically detects and uses your project's configured formatter.
+Alternative to the `nix fmt` command that also does build and evaluation caching.
 
 ## Features
 
-- **Project-aware**: Automatically detects and uses the formatter defined in your flake
 - **Smart caching**: Caches formatter evaluation and builds to avoid evaluation/rebuilding on every invocation
 - **Automatic rebuilding**: Rebuilds the formatter only when `flake.nix` or `flake.lock` changes
 
@@ -38,21 +37,34 @@ Simply run `flake-fmt` in any Nix flake directory:
 flake-fmt
 ```
 
-Pass any arguments to the underlying formatter:
+Everything before `--` is passed to Nix commands, everything after is passed to the formatter.
 
 ```bash
-flake-fmt --check
-flake-fmt path/to/file.nix
+flake-fmt -- --check
+flake-fmt -- path/to/file.nix
+# Pass --quiet to nix build/eval, and -v to the formatter
+flake-fmt --quiet -- -v
 ```
+
+## Why not `nix fmt`?
+
+The built-in `nix fmt` command has a significant issue: whenever it reformats the tree, Nix's own evaluation cache is invalidated.
+This happens because formatting modifies files that Nix tracks, causing it to re-evaluate the entire flake on subsequent commands.
+Additionally, formatters invoked by `nix fmt` have no garbage collection roots, meaning they can be removed during garbage collection and need to be rebuilt.
+
+`flake-fmt` solves these problems by:
+- Caching the formatter build separately from Nix's evaluation cache
+- Not interfering with Nix's source tree tracking
+- Maintaining persistent formatter builds that survive garbage collection
 
 ## How it works
 
-1. First checks if `treefmt` is available globally and uses it directly if found
-2. Otherwise, evaluates your flake to get the formatter for your current system
-3. Builds the formatter using Nix and caches it in `.cache/flake-fmt/` with a hashed directory name
-4. Executes the formatter with any arguments you passed
+1. **Find flake**: Locates the nearest `flake.nix` by searching up the directory tree
+2. **Check cache**: Looks for a cached formatter in `.cache/flake-fmt/` using a hash of the flake path
+3. **Rebuild if needed**: Rebuilds the formatter only when `flake.nix` or `flake.lock` have changed
+4. **Execute formatter**: Runs the formatter with any provided arguments
 
-The formatter is only rebuilt when your `flake.nix` or `flake.lock` changes, making subsequent runs fast.
+The cached formatter persists across garbage collections since it's stored outside the Nix store, making repeated runs instant.
 
 ## Requirements
 
