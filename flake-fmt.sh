@@ -51,7 +51,7 @@ toplevel=$(find_flake_root)
 buildArgs=()
 # Escape the directory name for safe use in cache path
 escaped_toplevel=$(printf '%s' "$toplevel" | sha256sum | cut -d' ' -f1)
-cache_dir="$toplevel/.cache/flake-fmt"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/flake-fmt"
 fmt="$cache_dir/$escaped_toplevel"
 
 if [[ ! -d "$fmt" ]]; then

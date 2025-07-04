@@ -4,6 +4,10 @@
     {
       buildInputs = [ flake-fmt ];
     } ''
+    # Set up a proper HOME directory
+    export HOME=$TMPDIR/home
+    mkdir -p $HOME
+
     # Create a test directory with a sample flake
     mkdir -p test
     cd test
@@ -108,9 +112,10 @@
       echo "=== Testing gcroot functionality ==="
 
       # Check that the formatter was cached
-      if [[ -d .cache/flake-fmt ]]; then
+      cache_base=''${XDG_CACHE_HOME:-$HOME/.cache}
+      if [[ -d $cache_base/flake-fmt ]]; then
         echo "Cache directory exists"
-        ls -la .cache/flake-fmt/
+        ls -la $cache_base/flake-fmt/
       fi
 
       # Run garbage collection
@@ -139,7 +144,7 @@
       rm -f .formatter-ran
             
       # Get the cache link path
-      cache_link=$(find .cache/flake-fmt -type l -name "*" | head -1)
+      cache_link=$(find $cache_base/flake-fmt -type l -name "*" | head -1)
       echo "Cache link: $cache_link"
             
       # Record the original formatter path
