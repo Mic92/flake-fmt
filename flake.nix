@@ -17,7 +17,7 @@
           
           flake-fmt = pkgs.writeShellApplication {
             name = "flake-fmt";
-            runtimeInputs = with pkgs; [ git coreutils ];
+            runtimeInputs = with pkgs; [ coreutils ];
             text = builtins.readFile ./flake-fmt.sh;
           };
         };

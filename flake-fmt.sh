@@ -5,7 +5,23 @@ set -euo pipefail
 
 needsUpdate=0
 currentSystem=$(nix --extra-experimental-features 'nix-command flakes' eval --raw --impure --expr builtins.currentSystem )
-toplevel=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+
+# Function to find the closest flake.nix
+find_flake_root() {
+    local dir="$PWD"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/flake.nix" ]]; then
+            echo "$dir"
+            return 0
+        fi
+        dir=$(dirname "$dir")
+    done
+    # If no flake.nix found, use current directory
+    echo "$PWD"
+}
+
+# Find the flake root
+toplevel=$(find_flake_root)
 buildArgs=()
 # Escape the directory name for safe use in cache path
 escaped_toplevel=$(printf '%s' "$toplevel" | sha256sum | cut -d' ' -f1)

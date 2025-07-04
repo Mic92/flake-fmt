@@ -57,7 +57,6 @@ The formatter is only rebuilt when your `flake.nix` or `flake.lock` changes, mak
 ## Requirements
 
 - Nix with flakes enabled
-- Git (for detecting repository root and caching)
 - A flake with a `formatter` output defined
 
 ## Example flake with formatter
