@@ -43,6 +43,15 @@ elif [[ -n "$toplevel" ]]; then
 fi
 
 if [[ "$needsUpdate" == 1 ]]; then
+    # Check if formatter exists for current system
+    has_formatter_check="(val: val ? ${currentSystem})"
+    
+    if [[ $(nix --extra-experimental-features 'nix-command flakes' eval ".#formatter" --apply "$has_formatter_check" 2>/dev/null) != "true" ]]; then
+        echo "Warning: No formatter defined for system ${currentSystem} in flake.nix" >&2
+        exit 0
+    fi
+    
+    # Formatter exists, build it
     fmt=$(nix --extra-experimental-features 'nix-command flakes' build --print-out-paths --out-link "$fmt" --builders '' "${buildArgs[@]}" ".#formatter.${currentSystem}" )
 fi
 
