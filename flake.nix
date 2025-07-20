@@ -28,14 +28,28 @@
       checks = forAllSystems (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          checkSet = pkgs.callPackage ./checks.nix {
-            inherit system;
-            flake-fmt = self.packages.${system}.flake-fmt;
-            inherit (pkgs) nix lsof;
-          };
+        in
+        pkgs.callPackage ./checks.nix {
+          inherit self;
+          flake-fmt = self.packages.${system}.flake-fmt;
+        }
+      );
+
+      devShells = forAllSystems (system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          flake-fmt = self.packages.${system}.flake-fmt;
         in
         {
-          inherit (checkSet) flake-fmt-test flake-fmt-with-formatter-test;
+          default = pkgs.mkShell {
+            packages = with pkgs; [
+              python3
+              python3Packages.pytest
+              ruff
+              mypy
+              flake-fmt
+            ];
+          };
         }
       );
     };

@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flake-fmt"
+version = "0.1.0"
+description = "A smart formatter wrapper for Nix flakes with caching"
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "MIT"}
+authors = [
+    {name = "Mic92"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+flake-fmt = "flake_fmt:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test_flake_fmt.py"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+lint.select = ["ALL"]
+lint.ignore = [
+    "S603",  # subprocess without shell=True - we control all inputs
+    "S607",  # Starting a process with a partial executable path - git is in PATH
+    "D203",  # 1 blank line required before class docstring (conflicts with D211)
+    "D213",  # Multi-line docstring summary should start at the second line (conflicts with D212)
+    "T201",  # print found - we use print for user output
+    "T203",  # pprint found - we use print for user output
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = ["S101"]  # Allow assert in tests
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

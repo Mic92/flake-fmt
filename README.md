@@ -46,6 +46,14 @@ flake-fmt -- path/to/file.nix
 flake-fmt --quiet -- -v
 ```
 
+### Cache invalidation
+
+To force a rebuild of the formatter (ignoring the cache), set the `NO_CACHE` environment variable:
+
+```bash
+NO_CACHE=1 flake-fmt
+```
+
 ## Why not `nix fmt`?
 
 The built-in `nix fmt` command has a significant issue: whenever it reformats the tree, Nix's own evaluation cache is invalidated.
