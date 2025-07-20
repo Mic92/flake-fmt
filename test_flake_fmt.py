@@ -3,10 +3,10 @@
 
 import io
 import subprocess
+import tarfile
 import tempfile
 import time
-from collections.abc import Iterator
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr
 from pathlib import Path
 
 import pytest
@@ -30,6 +30,7 @@ def nix_sandbox_env(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("NIX_LOG_DIR", str(test_root / "log"))
     monkeypatch.setenv("NIX_CONF_DIR", str(test_root / "etc"))
     monkeypatch.setenv("HOME", str(test_root / "home"))
+    monkeypatch.delenv("NIX_REMOTE", raising=False)
 
     # Create directories
     for dir_name in ["store", "share/nix", "state/nix/db", "log/nix", "etc/nix", "home"]:
@@ -62,74 +63,84 @@ build-dir = """
 
 
 @pytest.fixture
-def temp_flake_dir() -> Iterator[Path]:
+def temp_flake_dir(tmp_path: Path) -> Path:
     """Create a temporary directory with a basic flake setup."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
+    tmpdir_path = Path(tmp_path)
 
-        # Get current system
-        result = subprocess.run(
-            ["nix", "eval", "--raw", "--impure", "--expr", "builtins.currentSystem"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        current_system = result.stdout.strip()
+    # Get current system
+    result = subprocess.run(
+        ["nix", "--extra-experimental-features", "flakes nix-command", "config", "show", "system"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    current_system = result.stdout.strip()
 
-        # Create a basic flake.nix
-        flake_content = f"""
+    # Create a test formatter tarball
+    formatter_build = tmpdir_path / "formatter-build"
+    formatter_build.mkdir()
+    bin_dir = formatter_build / "bin"
+    bin_dir.mkdir()
+
+    # Create the test formatter script
+    formatter_script = bin_dir / "test-formatter"
+    formatter_script.write_text("""#!/bin/sh
+echo "Formatting..."
+echo "$@" > .formatter-ran
+""")
+    formatter_script.chmod(0o755)
+
+    # Create tarball with a parent directory
+    tarball_path = tmpdir_path / "formatter.tar.gz"
+    with tarfile.open(tarball_path, "w:gz") as tar:
+        # Add with parent directory to match Nix's expectations
+        tar.add(formatter_build, arcname="formatter", recursive=True)
+
+    # Create a basic flake.nix that uses the tarball as an input
+    flake_content = f"""
 {{
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.formatter.url = "tarball+file://{tarball_path}";
+  inputs.formatter.flake = false;
 
-  outputs = {{ self, nixpkgs }}: {{
-    formatter.{current_system} = nixpkgs.legacyPackages.{current_system}.writeShellScriptBin "test-formatter" ''
-      echo "Formatting..."
-      touch .formatter-ran
-      echo "$@"
-    '';
+  outputs = {{ self, formatter }}: {{
+    formatter.{current_system} = formatter.outPath;
   }};
 }}
 """
-        (tmpdir_path / "flake.nix").write_text(flake_content)
+    (tmpdir_path / "flake.nix").write_text(flake_content)
 
-        # Run git init to make it a valid flake
-        subprocess.run(["git", "init"], check=False, cwd=tmpdir_path, capture_output=True)
-        subprocess.run(["git", "add", "flake.nix"], check=False, cwd=tmpdir_path, capture_output=True)
+    # Run git init to make it a valid flake
+    subprocess.run(["git", "init"], check=False, cwd=tmpdir_path, capture_output=True)
+    subprocess.run(["git", "add", "flake.nix"], check=False, cwd=tmpdir_path, capture_output=True)
 
-        yield tmpdir_path
+    return tmpdir_path
 
 
 def test_basic_functionality(temp_flake_dir: Path, monkeypatch: MonkeyPatch) -> None:
     """Test that flake-fmt runs the formatter."""
     monkeypatch.chdir(temp_flake_dir)
 
-    # Add some debug output
-    print(f"Working directory: {Path.cwd()}")
-    print(f"Flake exists: {(temp_flake_dir / 'flake.nix').exists()}")
-    print(f"Contents: {(temp_flake_dir / 'flake.nix').read_text()[:100]}")
-
     # Run flake-fmt
-    stderr = io.StringIO()
-    with redirect_stderr(stderr), pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(SystemExit) as exc_info:
         main([])
-    print(f"Exit code: {exc_info.value.code}")
-    print(f"Stderr: {stderr.getvalue()}")
     assert exc_info.value.code == 0
     assert (temp_flake_dir / ".formatter-ran").exists()
+    # When no args are passed, the file should be empty
+    assert (temp_flake_dir / ".formatter-ran").read_text().strip() == ""
 
 
 def test_formatter_arguments(temp_flake_dir: Path, monkeypatch: MonkeyPatch) -> None:
     """Test that arguments are passed to the formatter."""
     monkeypatch.chdir(temp_flake_dir)
 
-    # Capture stdout to check formatter output
-
-    output = io.StringIO()
-    with redirect_stdout(output), pytest.raises(SystemExit) as exc_info:
+    # Run with arguments
+    with pytest.raises(SystemExit) as exc_info:
         main(["--", "arg1", "arg2"])
 
     assert exc_info.value.code == 0
-    assert "arg1 arg2" in output.getvalue()
+    # Check that arguments were passed to the formatter
+    assert (temp_flake_dir / ".formatter-ran").exists()
+    assert (temp_flake_dir / ".formatter-ran").read_text().strip() == "arg1 arg2"
 
 
 def test_nix_arguments(temp_flake_dir: Path, monkeypatch: MonkeyPatch) -> None:
@@ -210,8 +221,7 @@ def test_no_formatter_defined(monkeypatch: MonkeyPatch) -> None:
         # Create a flake without formatter
         flake_content = """
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  outputs = { self, nixpkgs }: {};
+  outputs = { self }: {};
 }
 """
         (tmpdir_path / "flake.nix").write_text(flake_content)
@@ -228,6 +238,7 @@ def test_no_formatter_defined(monkeypatch: MonkeyPatch) -> None:
         with redirect_stderr(stderr), pytest.raises(SystemExit) as exc_info:
             main([])
 
+        print(stderr.getvalue())
         assert exc_info.value.code == 0
         assert "Warning: No formatter defined" in stderr.getvalue()
 
@@ -246,16 +257,22 @@ def test_find_flake_in_subdirectory(temp_flake_dir: Path, monkeypatch: MonkeyPat
     assert (temp_flake_dir / ".formatter-ran").exists()
 
 
-def test_no_flake_found(monkeypatch: MonkeyPatch) -> None:
+def test_no_flake_found(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     """Test error when no flake.nix is found."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        monkeypatch.chdir(tmpdir)
+    # Create a git repository to prevent find_flake_root from searching parent directories
+    test_dir = tmp_path / "test_no_flake"
+    test_dir.mkdir()
 
-        # Capture stderr
+    # Initialize git repo to create a boundary
+    subprocess.run(["git", "init"], check=True, cwd=test_dir, capture_output=True)
 
-        stderr = io.StringIO()
-        with redirect_stderr(stderr), pytest.raises(SystemExit) as exc_info:
-            main([])
+    monkeypatch.chdir(test_dir)
 
-        assert exc_info.value.code == 1
-        assert "No flake.nix found" in stderr.getvalue()
+    # Capture stderr
+    stderr = io.StringIO()
+    with redirect_stderr(stderr), pytest.raises(SystemExit) as exc_info:
+        main([])
+
+    print(stderr.getvalue())
+    assert "No flake.nix found" in stderr.getvalue()
+    assert exc_info.value.code == 1

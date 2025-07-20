@@ -1,5 +1,4 @@
-{ lib
-, writeShellApplication
+{ writeShellApplication
 , nixpkgs-fmt
 , fd
 , ruff

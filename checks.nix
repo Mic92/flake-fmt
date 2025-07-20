@@ -1,7 +1,4 @@
 { pkgs
-, flake-fmt
-, self
-,
 }:
 let
   pythonWithPytest = pkgs.python3.withPackages (ps: [ ps.pytest ]);

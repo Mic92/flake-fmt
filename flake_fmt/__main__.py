@@ -8,8 +8,31 @@ import sys
 from pathlib import Path
 
 
+class NixCommandError(Exception):
+    """Exception raised when a nix command fails."""
+
+    def __init__(self, cmd: list[str], returncode: int, stdout: str, stderr: str) -> None:
+        """Initialize NixCommandError with command details and output.
+
+        Args:
+            cmd: The nix command that was executed
+            returncode: The exit code returned by the command
+            stdout: The standard output from the command
+            stderr: The standard error output from the command
+
+        """
+        self.cmd = cmd
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+        super().__init__(f"Nix command failed with exit code {returncode}: {' '.join(cmd)}\nstderr: {stderr}")
+
+
 def find_flake_root(start_path: Path | None = None) -> Path | None:
-    """Find the nearest flake.nix by searching up the directory tree."""
+    """Find the nearest flake.nix by searching up the directory tree.
+
+    Stops at git repository boundaries (.git directory).
+    """
     if start_path is None:
         start_path = Path.cwd()
     current = start_path.resolve()
@@ -18,6 +41,11 @@ def find_flake_root(start_path: Path | None = None) -> Path | None:
         flake_path = current / "flake.nix"
         if flake_path.exists():
             return current
+
+        # Stop at git repository boundaries
+        if (current / ".git").exists():
+            return None
+
         current = current.parent
 
     # Check root directory
@@ -51,19 +79,19 @@ def run_nix(
     capture_output: bool = True,
 ) -> str | subprocess.CompletedProcess:
     """Run a nix command with proper error handling."""
-    cmd = ["nix", *args]
+    cmd = ["nix", "--extra-experimental-features", "flakes nix-command", *args]
 
     if capture_output:
         result = subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=cwd, shell=False)
         if result.returncode != 0:
-            sys.exit(result.returncode)
+            raise NixCommandError(cmd, result.returncode, result.stdout, result.stderr)
         return result.stdout.strip()
     return subprocess.run(cmd, check=False, cwd=cwd, shell=False)
 
 
 def get_current_system() -> str:
     """Get the current system identifier."""
-    result = run_nix(["eval", "--raw", "--impure", "--expr", "builtins.currentSystem"])
+    result = run_nix(["config", "show", "system"])
     if isinstance(result, str):
         return result
     msg = "Expected string result from nix eval"
@@ -110,14 +138,21 @@ def build_formatter(
     """Build the formatter if needed."""
     # Check if formatter exists for current system
     has_formatter_check = f"(val: val ? {current_system})"
-    result = run_nix(["eval", ".#formatter", "--apply", has_formatter_check, *nix_args], cwd=toplevel)
-    if not isinstance(result, str):
-        msg = "Expected string result from nix eval"
-        raise TypeError(msg)
+    try:
+        result = run_nix(["eval", ".#formatter", "--apply", has_formatter_check, *nix_args], cwd=toplevel)
+        if not isinstance(result, str):
+            msg = "Expected string result from nix eval"
+            raise TypeError(msg)
 
-    if result != "true":
-        print("Warning: No formatter defined", file=sys.stderr)
-        sys.exit(0)
+        if result != "true":
+            print("Warning: No formatter defined", file=sys.stderr)
+            sys.exit(0)
+    except NixCommandError as e:
+        # If the formatter attribute doesn't exist at all, nix will error
+        if "does not provide attribute" in e.stderr:
+            print("Warning: No formatter defined", file=sys.stderr)
+            sys.exit(0)
+        raise
 
     # Build formatter
     build_cmd = [
@@ -165,32 +200,36 @@ def execute_formatter(fmt_cache_path: Path, formatter_args: list[str], toplevel:
 
 def main(args: list[str] | None = None) -> None:
     """Run the flake formatter with caching."""
-    # Parse arguments
-    if args is None:
-        args = sys.argv[1:]
-    nix_args, formatter_args = parse_arguments(args)
+    try:
+        # Parse arguments
+        if args is None:
+            args = sys.argv[1:]
+        nix_args, formatter_args = parse_arguments(args)
 
-    # Find flake root
-    toplevel = find_flake_root()
-    if toplevel is None:
-        print("No flake.nix found", file=sys.stderr)
-        sys.exit(1)
+        # Find flake root
+        toplevel = find_flake_root()
+        if toplevel is None:
+            print("No flake.nix found", file=sys.stderr)
+            sys.exit(1)
 
-    # Get current system
-    current_system = get_current_system()
+        # Get current system
+        current_system = get_current_system()
 
-    # Set up cache
-    cache_dir, fmt_cache_path = get_cache_path(toplevel)
+        # Set up cache
+        cache_dir, fmt_cache_path = get_cache_path(toplevel)
 
-    # Check cache validity
-    needs_update, build_args = check_cache_validity(fmt_cache_path, toplevel)
+        # Check cache validity
+        needs_update, build_args = check_cache_validity(fmt_cache_path, toplevel)
 
-    if needs_update:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        fmt_cache_path = build_formatter(toplevel, current_system, fmt_cache_path, build_args, nix_args)
+        if needs_update:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            fmt_cache_path = build_formatter(toplevel, current_system, fmt_cache_path, build_args, nix_args)
 
-    # Execute formatter
-    execute_formatter(fmt_cache_path, formatter_args, toplevel)
+        # Execute formatter
+        execute_formatter(fmt_cache_path, formatter_args, toplevel)
+    except NixCommandError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 if __name__ == "__main__":

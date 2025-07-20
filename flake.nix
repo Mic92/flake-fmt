@@ -29,10 +29,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
         in
-        pkgs.callPackage ./checks.nix {
-          inherit self;
-          flake-fmt = self.packages.${system}.flake-fmt;
-        }
+        pkgs.callPackages ./checks.nix { }
       );
 
       devShells = forAllSystems (system:
