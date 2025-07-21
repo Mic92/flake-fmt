@@ -1,22 +1,29 @@
-{ lib
-, writeShellApplication
+{ writeShellApplication
 , nixpkgs-fmt
-, shfmt
-, shellcheck
 , fd
+, ruff
+, mypy
 }:
 
 writeShellApplication {
   name = "formatter";
-  runtimeInputs = [ nixpkgs-fmt shfmt shellcheck fd ];
+  runtimeInputs = [
+    nixpkgs-fmt
+    fd
+    ruff
+    mypy
+  ];
   text = ''
     # Format Nix files
     fd -e nix -x nixpkgs-fmt {} \;
+    
+    # Format Python files
+    fd -e py -x ruff format {} \;
+    
+    # Run ruff linter with auto-fix
+    fd -e py -x ruff check --unsafe-fixes --fix {} \;
 
-    # Format shell scripts
-    fd -e sh -x shfmt -w {} \;
-
-    # Check shell scripts
-    fd -e sh -x shellcheck {} \;
+    # Type check with mypy
+    mypy flake_fmt
   '';
 }
