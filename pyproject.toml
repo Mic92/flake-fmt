@@ -43,6 +43,7 @@ lint.ignore = [
     "D213",  # Multi-line docstring summary should start at the second line (conflicts with D212)
     "T201",  # print found - we use print for user output
     "T203",  # pprint found - we use print for user output
+    "COM812",  # Trailing comma missing - conflicts with formatter
 ]
 
 [tool.ruff.lint.per-file-ignores]
