@@ -132,7 +132,7 @@ def check_cache_validity(fmt_cache_path: Path, toplevel: Path) -> tuple[bool, li
         needs_update = True
     else:
         build_args.extend(["-o", str(fmt_cache_path)])
-        reference_time = fmt_cache_path.stat().st_mtime
+        reference_time = fmt_cache_path.lstat().st_mtime
         logger.debug("Cache exists, last modified: %s", reference_time)
 
         # Check if flake.nix or flake.lock are newer
