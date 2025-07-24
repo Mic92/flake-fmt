@@ -2,6 +2,8 @@
 """Tests for flake-fmt."""
 
 import io
+import os
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -276,3 +278,44 @@ def test_no_flake_found(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     print(stderr.getvalue())
     assert "No flake.nix found" in stderr.getvalue()
     assert exc_info.value.code == 1
+
+
+def test_cache_hit(temp_flake_dir: Path, monkeypatch: MonkeyPatch) -> None:
+    """Test that cache is properly used on second run."""
+    monkeypatch.chdir(temp_flake_dir)
+
+    # Enable debug logging
+    monkeypatch.setenv("FLAKE_FMT_DEBUG", "1")
+
+    # First run to populate cache
+    with pytest.raises(SystemExit) as exc_info:
+        main([])
+    assert exc_info.value.code == 0
+    assert (temp_flake_dir / ".formatter-ran").exists()
+
+    # Delete marker file
+    (temp_flake_dir / ".formatter-ran").unlink()
+
+    # Create a fake nix command that will fail if called for building
+    fake_nix_script = temp_flake_dir / "nix"
+    real_nix_path = shutil.which("nix")
+    fake_nix_script.write_text(f"""#!/bin/sh
+echo "FAKE NIX CALLED WITH: $@" >&2
+if echo "$@" | grep -q "build.*formatter"; then
+    echo "ERROR: Nix build should not be called on cache hit!" >&2
+    exit 1
+fi
+# Pass through to real nix for other commands
+exec {real_nix_path} "$@"
+""")
+    fake_nix_script.chmod(0o755)
+
+    # Prepend our fake nix to PATH
+    original_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = f"{temp_flake_dir}:{original_path}"
+
+    # Second run should use cache and NOT call nix build
+    with pytest.raises(SystemExit) as exc_info:
+        main([])
+    assert exc_info.value.code == 0
+    assert (temp_flake_dir / ".formatter-ran").exists()
