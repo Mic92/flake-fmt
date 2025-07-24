@@ -54,6 +54,14 @@ To force a rebuild of the formatter (ignoring the cache), set the `NO_CACHE` env
 NO_CACHE=1 flake-fmt
 ```
 
+### Debug logging
+
+To understand why the formatter is being rebuilt, enable debug logging by setting `FLAKE_FMT_DEBUG` to `1`, `true`, `yes`, or `on`. This will show detailed information about cache validity checks, including file modification times and the exact reason for rebuilds:
+
+```bash
+FLAKE_FMT_DEBUG=1 flake-fmt
+```
+
 ## Why not `nix fmt`?
 
 The built-in `nix fmt` command has a significant issue: whenever it reformats the tree, Nix's own evaluation cache is invalidated.
