@@ -278,6 +278,9 @@ def main(args: list[str] | None = None) -> None:
         # Execute formatter
         logger.debug("Executing formatter from: %s", fmt_cache_path)
         execute_formatter(fmt_cache_path, formatter_args, toplevel)
+    except KeyboardInterrupt:
+        # Exit cleanly on Ctrl-C
+        sys.exit(130)
     except NixCommandError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(e.returncode)
