@@ -7,29 +7,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from subprocess import PIPE
 
 # Create module-specific logger
 logger = logging.getLogger(__name__)
-
-
-class NixCommandError(Exception):
-    """Exception raised when a nix command fails."""
-
-    def __init__(self, cmd: list[str], returncode: int, stdout: str, stderr: str) -> None:
-        """Initialize NixCommandError with command details and output.
-
-        Args:
-            cmd: The nix command that was executed
-            returncode: The exit code returned by the command
-            stdout: The standard output from the command
-            stderr: The standard error output from the command
-
-        """
-        self.cmd = cmd
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-        super().__init__(f"Nix command failed with exit code {returncode}: {' '.join(cmd)}\nstderr: {stderr}")
 
 
 def find_flake_root(start_path: Path | None = None) -> Path | None:
@@ -85,26 +66,19 @@ def run_nix(
     args: list[str],
     cwd: Path | None = None,
     *,
-    capture_output: bool = True,
-) -> str | subprocess.CompletedProcess:
+    stdout: int | None = None,
+    stderr: int | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
     """Run a nix command with proper error handling."""
     cmd = ["nix", "--extra-experimental-features", "flakes nix-command", *args]
 
-    if capture_output:
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=cwd, shell=False)
-        if result.returncode != 0:
-            raise NixCommandError(cmd, result.returncode, result.stdout, result.stderr)
-        return result.stdout.strip()
-    return subprocess.run(cmd, check=False, cwd=cwd, shell=False)
+    return subprocess.run(cmd, check=check, stdout=stdout, stderr=stderr, text=True, cwd=cwd, shell=False)
 
 
 def get_current_system() -> str:
     """Get the current system identifier."""
-    result = run_nix(["config", "show", "system"])
-    if isinstance(result, str):
-        return result
-    msg = "Expected string result from nix eval"
-    raise TypeError(msg)
+    return run_nix(["config", "show", "system"], stdout=PIPE).stdout.strip()
 
 
 def get_cache_path(toplevel: Path) -> tuple[Path, Path]:
@@ -166,18 +140,16 @@ def build_formatter(
     has_formatter_check = f"(val: val ? {current_system})"
     try:
         logger.debug("Checking if formatter exists for %s", current_system)
-        result = run_nix(["eval", ".#formatter", "--apply", has_formatter_check, *nix_args], cwd=toplevel)
-        if not isinstance(result, str):
-            msg = "Expected string result from nix eval"
-            raise TypeError(msg)
-
-        if result != "true":
+        result = run_nix(
+            ["eval", ".#formatter", "--apply", has_formatter_check, *nix_args], cwd=toplevel, stdout=PIPE, stderr=PIPE
+        )
+        if result.stdout.strip() != "true":
             logger.debug("No formatter defined for current system")
             print("Warning: No formatter defined", file=sys.stderr)
             sys.exit(0)
-    except NixCommandError as e:
+    except subprocess.CalledProcessError as e:
         # If the formatter attribute doesn't exist at all, nix will error
-        if "does not provide attribute" in e.stderr:
+        if e.stderr and "does not provide attribute" in e.stderr:
             logger.debug("Formatter attribute does not exist")
             print("Warning: No formatter defined", file=sys.stderr)
             sys.exit(0)
@@ -197,11 +169,8 @@ def build_formatter(
         f".#formatter.{current_system}",
     ]
     logger.debug("Running build command: nix %s", " ".join(build_cmd))
-    fmt_path = run_nix(build_cmd, cwd=toplevel)
-    if not isinstance(fmt_path, str):
-        msg = "Expected string result from nix build"
-        raise TypeError(msg)
-    result_path = Path(fmt_path.strip())
+    fmt_path = run_nix(build_cmd, cwd=toplevel, stdout=PIPE)
+    result_path = Path(fmt_path.stdout.strip())
     logger.debug("Formatter built successfully at: %s", result_path)
     return result_path
 
@@ -281,7 +250,7 @@ def main(args: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         # Exit cleanly on Ctrl-C
         sys.exit(130)
-    except NixCommandError as e:
+    except subprocess.CalledProcessError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(e.returncode)
 
