@@ -112,8 +112,8 @@ echo "$@" > .formatter-ran
     (tmpdir_path / "flake.nix").write_text(flake_content)
 
     # Run git init to make it a valid flake
-    subprocess.run(["git", "init"], check=False, cwd=tmpdir_path, capture_output=True)
-    subprocess.run(["git", "add", "flake.nix"], check=False, cwd=tmpdir_path, capture_output=True)
+    subprocess.run(["git", "init"], check=False, cwd=tmpdir_path)
+    subprocess.run(["git", "add", "flake.nix"], check=False, cwd=tmpdir_path)
 
     return tmpdir_path
 
@@ -229,8 +229,8 @@ def test_no_formatter_defined(monkeypatch: MonkeyPatch) -> None:
         (tmpdir_path / "flake.nix").write_text(flake_content)
 
         # Run git init
-        subprocess.run(["git", "init"], check=False, cwd=tmpdir_path, capture_output=True)
-        subprocess.run(["git", "add", "flake.nix"], check=False, cwd=tmpdir_path, capture_output=True)
+        subprocess.run(["git", "init"], check=False, cwd=tmpdir_path)
+        subprocess.run(["git", "add", "flake.nix"], check=False, cwd=tmpdir_path)
 
         monkeypatch.chdir(tmpdir_path)
 
@@ -266,7 +266,7 @@ def test_no_flake_found(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     test_dir.mkdir()
 
     # Initialize git repo to create a boundary
-    subprocess.run(["git", "init"], check=True, cwd=test_dir, capture_output=True)
+    subprocess.run(["git", "init"], check=True, cwd=test_dir)
 
     monkeypatch.chdir(test_dir)
 
