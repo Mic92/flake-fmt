@@ -1,14 +1,10 @@
 { pkgs
 }:
-let
-  pythonWithPytest = pkgs.python3.withPackages (ps: [ ps.pytest ]);
-  pythonWithTools = pkgs.python3.withPackages (ps: [ ps.ruff ps.mypy ]);
-in
 {
   pytest = pkgs.runCommand "flake-fmt-pytest"
     {
-      buildInputs = [
-        pythonWithPytest
+      nativeBuildInputs = [
+        pkgs.python3.pkgs.pytest
         pkgs.git
         pkgs.nix
       ];
@@ -17,18 +13,15 @@ in
     # Copy source files
     cp -r $src/* .
     
-    # Make sure we have a proper PATH
-    export PATH="${pkgs.git}/bin:${pkgs.nix}/bin:$PATH"
-    
     # Run pytest
-    python -m pytest test_flake_fmt.py -v
+    pytest test_flake_fmt.py -v
     
     touch $out
   '';
 
   ruff = pkgs.runCommand "flake-fmt-ruff"
     {
-      buildInputs = [ pythonWithTools ];
+      nativeBuildInputs = [ pkgs.ruff ];
       src = ./.;
     } ''
     # Copy source files
@@ -36,18 +29,18 @@ in
     
     # Run ruff format check
     echo "Running ruff format check..."
-    python -m ruff format --check flake_fmt test_flake_fmt.py
+    ruff format --check flake_fmt test_flake_fmt.py
     
     # Run ruff lint check
     echo "Running ruff lint check..."
-    python -m ruff check flake_fmt test_flake_fmt.py
+    ruff check flake_fmt test_flake_fmt.py
     
     touch $out
   '';
 
   mypy = pkgs.runCommand "flake-fmt-mypy"
     {
-      buildInputs = [ pythonWithTools ];
+      nativeBuildInputs = [ pkgs.mypy ];
       src = ./.;
     } ''
     # Copy source files
@@ -55,7 +48,7 @@ in
     
     # Run mypy
     echo "Running mypy type check..."
-    python -m mypy flake_fmt
+    mypy flake_fmt
     
     touch $out
   '';
