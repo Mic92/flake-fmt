@@ -1,0 +1,11 @@
+[package]
+name = "flake-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Smart formatter wrapper for Nix flakes with sound caching"
+
+[[bin]]
+name = "flake-fmt"
+path = "src/main.rs"

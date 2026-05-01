@@ -1,0 +1,11 @@
+[package]
+name = "flake-fmt-trace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "LD_PRELOAD/DYLD_INSERT shim recording file reads under a flake root"
+
+[lib]
+name = "flake_fmt_trace"
+crate-type = ["cdylib"]
