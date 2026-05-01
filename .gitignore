@@ -3,3 +3,4 @@ result-*
 .direnv/
 .cache/
 __pycache__
+/target

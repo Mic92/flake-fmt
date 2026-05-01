@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/flake-fmt", "crates/flake-fmt-trace"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/Mic92/flake-fmt"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

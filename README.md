@@ -5,7 +5,7 @@ Alternative to the `nix fmt` command that also does build and evaluation caching
 ## Features
 
 - **Smart caching**: Caches formatter evaluation and builds to avoid evaluation/rebuilding on every invocation
-- **Automatic rebuilding**: Rebuilds the formatter only when `flake.nix` or `flake.lock` changes
+- **Sound invalidation**: Records every source file the flake eval actually reads (via an `LD_PRELOAD` / `DYLD_INSERT_LIBRARIES` shim) and rebuilds when any of them changes -- not just `flake.nix`/`flake.lock`
 
 ## Installation
 
@@ -75,12 +75,13 @@ Additionally, formatters invoked by `nix fmt` have no garbage collection roots, 
 
 ## How it works
 
-1. **Find flake**: Locates the nearest `flake.nix` by searching up the directory tree
-2. **Check cache**: Looks for a cached formatter in `.cache/flake-fmt/` using a hash of the flake path
-3. **Rebuild if needed**: Rebuilds the formatter only when `flake.nix` or `flake.lock` have changed
-4. **Execute formatter**: Runs the formatter with any provided arguments
+1. **Find flake**: Locates the nearest `flake.nix` by walking up to a `.git` boundary.
+2. **Check cache**: Looks for `~/.cache/flake-fmt/<hash>` (out-link) and `<hash>.deps` (sidecar of `<mtime>\t<path>` lines).
+3. **Fast path**: If every recorded file's mtime is unchanged, exec the cached formatter without invoking nix at all.
+4. **Slow path**: Spawn `nix build .#formatter.<system>` with the `flake-fmt-trace` shim preloaded; the shim records every `open`/`stat`/`access` whose path sits under the flake root. After nix exits, persist the deduped path list plus current mtimes to the sidecar.
+5. **Execute formatter**: Run the binary from `<out-link>/bin` (preferring `treefmt`).
 
-The cached formatter persists across garbage collections since it's stored outside the Nix store, making repeated runs instant.
+The out-link doubles as a Nix gcroot, so cached formatters survive garbage collection.
 
 ## Requirements
 

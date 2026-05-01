@@ -29,7 +29,9 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
         in
-        pkgs.callPackages ./checks.nix { }
+        pkgs.callPackage ./checks.nix {
+          flake-fmt = self.packages.${system}.flake-fmt;
+        }
       );
 
       devShells = forAllSystems (system:
@@ -40,10 +42,11 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              python3
-              python3Packages.pytest
-              ruff
-              mypy
+              cargo
+              rustc
+              clippy
+              rustfmt
+              rust-analyzer
               flake-fmt
             ];
           };
