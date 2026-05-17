@@ -1,8 +1,9 @@
-{ lib
-, stdenv
-, rustPlatform
-, makeWrapper
-, nix
+{
+  lib,
+  stdenv,
+  rustPlatform,
+  makeWrapper,
+  nix,
 }:
 
 rustPlatform.buildRustPackage {

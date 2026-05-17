@@ -1,24 +1,22 @@
-{ writeShellApplication
-, nixpkgs-fmt
-, fd
-, ruff
+{
+  writeShellApplication,
+  nixfmt-rs,
+  fd,
+  rustfmt,
 }:
 
 writeShellApplication {
   name = "formatter";
   runtimeInputs = [
-    nixpkgs-fmt
+    nixfmt-rs
     fd
-    ruff
+    rustfmt
   ];
   text = ''
     # Format Nix files
-    fd -e nix -x nixpkgs-fmt {} \;
-    
-    # Format Python files
-    fd -e py -x ruff format {} \;
-    
-    # Run ruff linter with auto-fix
-    fd -e py -x ruff check --unsafe-fixes --fix {} \;
+    fd -e nix -x nixfmt {} \;
+
+    # Format Rust files
+    fd -e rs -x rustfmt --edition 2024 {} \;
   '';
 }
