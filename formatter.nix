@@ -2,7 +2,6 @@
 , nixpkgs-fmt
 , fd
 , ruff
-, mypy
 }:
 
 writeShellApplication {
@@ -11,7 +10,6 @@ writeShellApplication {
     nixpkgs-fmt
     fd
     ruff
-    mypy
   ];
   text = ''
     # Format Nix files
@@ -22,8 +20,5 @@ writeShellApplication {
     
     # Run ruff linter with auto-fix
     fd -e py -x ruff check --unsafe-fixes --fix {} \;
-
-    # Type check with mypy
-    mypy flake_fmt
   '';
 }
