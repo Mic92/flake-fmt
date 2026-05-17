@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::ffi::{CString, OsString, c_char};
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
@@ -177,6 +177,20 @@ fn locate_trace_lib() -> Option<PathBuf> {
 
 /// Returns `(store_path, tracked_deps)`. `tracked_deps` is empty when no
 /// shim was available (degraded to flake.nix/flake.lock-only tracking).
+// Forwards to our stderr while keeping a copy so we can grep it afterwards.
+struct Tee(Vec<u8>);
+
+impl Write for Tee {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.extend_from_slice(buf);
+        io::stderr().write_all(buf)?;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        io::stderr().flush()
+    }
+}
+
 fn build_formatter(
     toplevel: &Path,
     cache: &CachePaths,
@@ -219,16 +233,27 @@ fn build_formatter(
         }
     }
 
-    let out = cmd.output()?;
-    if !out.status.success() {
-        io::stderr().write_all(&out.stderr).ok();
-        if String::from_utf8_lossy(&out.stderr).contains("does not provide attribute") {
+    // Stream build progress through instead of buffering it, but still keep
+    // the stderr text around to recognise the "no formatter" case below.
+    let mut child = cmd.spawn()?;
+    let mut child_err = child.stderr.take().unwrap();
+    let err_thread = std::thread::spawn(move || {
+        let mut tee = Tee(Vec::new());
+        io::copy(&mut child_err, &mut tee).ok();
+        tee.0
+    });
+    let mut stdout = String::new();
+    child.stdout.take().unwrap().read_to_string(&mut stdout)?;
+    let status = child.wait()?;
+    let stderr = err_thread.join().unwrap_or_default();
+    if !status.success() {
+        if String::from_utf8_lossy(&stderr).contains("does not provide attribute") {
             eprintln!("Warning: No formatter defined");
             return Ok(None);
         }
-        std::process::exit(out.status.code().unwrap_or(1));
+        std::process::exit(status.code().unwrap_or(1));
     }
-    let store_path = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+    let store_path = PathBuf::from(stdout.trim());
     let tracked = trace_file
         .map(|f| read_trace_fd(f, toplevel))
         .unwrap_or_default();
