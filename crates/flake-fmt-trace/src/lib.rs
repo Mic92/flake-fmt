@@ -179,7 +179,10 @@ type StatFn = unsafe extern "C" fn(*const c_char, *mut c_void) -> c_int;
 type FstatatFn = unsafe extern "C" fn(c_int, *const c_char, *mut c_void, c_int) -> c_int;
 type AccessFn = unsafe extern "C" fn(*const c_char, c_int) -> c_int;
 
+// open/openat are variadic in libc, but stable Rust can't define variadic
+// fns. On x86_64/aarch64 Linux `mode` is passed the same way either way.
 #[cfg(target_os = "linux")]
+#[allow(unknown_lints, invalid_runtime_symbol_definitions)]
 mod platform {
     use super::*;
 
